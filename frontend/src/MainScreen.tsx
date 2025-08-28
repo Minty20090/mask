@@ -28,6 +28,7 @@ import {
     Overlay,
     Loader,
     Center,
+    ScrollArea,
     useMantineTheme
 } from "@mantine/core";
 import { DateTimePicker } from '@mantine/dates';
@@ -72,6 +73,8 @@ function MainScreen() {
     const [mode, setMode] = useState<'new project' | 'open project' | null>(null);
     const [centerRA,  setCenterRA]  = useState<string>('');
     const [centerDec, setCenterDec] = useState<string>('');
+    const [maskCenterRA,  setMaskCenterRA]  = useState<string>('');
+    const [maskCenterDec, setMaskCenterDec] = useState<string>('');
     const [showMaskTab,  setShowMaskTab]  = useState(false);
     const [showTableTab, setShowTableTab] = useState(false);
     const [showSettingsTab,  setShowSettingsTab]  = useState(false);
@@ -90,11 +93,37 @@ function MainScreen() {
     const [HA, setHA] = useState<number | null>(null);
     const [lowerWave, setLowerWave] = useState<number | null>(null);
     const [upperWave, setUpperWave] = useState<number | null>(null);
+    const [waveCenter, setWaveCenter] = useState<number | null>(null);
+    const [exorder, setExorder] = useState<number | null>(null);
     const [pdecide, setPdecide] = useState<number | null>(null);
-    const [slitWidth, setSlitWidth] = useState<number | null>(null);
+    
     const [overlapPixels, setOverlapPixels] = useState<number | null>(null);
     const [isMaskGenerated, setIsMaskGenerated] = useState(false);
     const [isMaskCompleted, setIsMaskCompleted] = useState(false);
+    
+    const [alignHoleSize, setAlignHoleSize] = useState<number | null>(null);
+    
+    const [guideStars, setGuideStars] = useState([
+    { name: 'GS1', ra: '10.002168', dec: '2.61311', equinox: 2000.0, id: 'GS101' },
+    { name: 'GS2', ra: '10.002909', dec: '2.10239', equinox: 2000.0, id: 'GS102' },
+    ]);
+    // slits
+    const [slitWidth, setSlitWidth] = useState<number | null>(null);
+    const [shape, setShape] = useState<number | null>(null);
+    const [lowerLength, setLowerLength] = useState<number | null>(null); //alen
+    const [upperLength, setUpperLength] = useState<number | null>(null); //blen
+    const [uncutLeft, setUncutLeft] = useState<number | null>(null);
+    const [uncutRight, setUncutRight] = useState<number | null>(null);
+    const [extendSlits, setExtendSlits] = useState<0 | 1>(0);
+
+    const [repeatObject, setRepeatObject] = useState<number | null>(0);
+    const [ref, setRef] = useState<number | null>(0);
+    const [refLimit, setRefLimit] = useState<number | null>(0);
+    const [mustHave, setMustHave] = useState<number | null>(0);
+    const [prioSup, setPrioSup] = useState<number | null>(0);
+    const [diffRef, setDiffRef] = useState<0 | 1>(0); // differential refraction
+
+    
 
 
 
@@ -525,8 +554,91 @@ function MainScreen() {
             setLoading(false);
         }
     }
+    /* <----------------------------------------Mask Management------------------------------------------> */
 
+    const [maskNames, setMaskNames] = useState<string[]>([]);
+    const [loadingMasks, setLoadingMasks] = useState(false);
 
+    // Fetch all mask names
+    const fetchMaskNames = async () => {
+    try {
+        setLoadingMasks(true);
+        const res = await fetch(
+        `/api/masks/get_project_masks?project_name=${projectName}`, 
+        {
+            headers: {
+            "user-id": userId, // replace with actual user ID
+            },
+        }
+        );
+
+        if (!res.ok) throw new Error(`Failed to load masks: ${res.status}`);
+        const data = await res.json();
+        const maskNamesArray = data.map((mask: { name: string }) => mask.name);
+        setMaskNames(maskNamesArray);
+    } catch (err) {
+        console.error(err);
+        setError((err as Error).message);
+    } finally {
+        setLoadingMasks(false);
+    }
+    };
+
+    const loadMaskDetails = async (maskName: string) => {
+    try {
+        setLoadingMasks(true);
+        const res = await fetch(`/api/masks/${maskName}/?project_name=${projectName}`, {
+        headers: { "user-id": userId },
+        });
+
+        if (!res.ok) throw new Error(`Failed to load mask: ${res.status}`);
+        const maskData = await res.json();
+        console.log("Mask details:", maskData);
+
+        const setup = maskData.instrument_setup || {};
+
+        // Populate all state variables from instrument_setup
+        setMaskTitle(setup.title || '');
+        setMaskFileTitle(setup.filename || '');
+        setObserver(setup.observer || '');
+        setMaskCenterRA(setup.center_ra || '');
+        setMaskCenterDec(setup.center_dec || '');
+        setEquinox(String(setup.equinox) || null);
+        setSlitAngle(setup.position ?? null);
+        setHA(setup.hangle ?? null);
+        setLowerWave(setup.wlimit_low ?? null);
+        setUpperWave(setup.wlimit_high ?? null);
+        setWaveCenter(setup.wavelength ?? null);
+        setExorder(setup.exorder ?? null);
+        setPdecide(setup.pdecide ?? null);
+        setOverlapPixels(setup.overlap ?? null);
+        setAlignHoleSize(setup.refhole_width ?? null);
+        setGuideStars(setup.guide_stars || []);
+        setSlitWidth(setup.slit_width ?? null);
+        setShape(setup.refhole_shape ?? null);
+        setLowerLength(setup.a_len ?? null);
+        setUpperLength(setup.b_len ?? null);
+        setUncutLeft(setup.UNCUTLEFT ?? null);
+        setUncutRight(setup.UNCUTRIGHT ?? null);
+        setExtendSlits(setup.SLEXTEND ?? 0);
+        setRepeatObject(setup.REPOBJ ?? null);
+        setRef(setup.REPREF ?? null);
+        setRefLimit(setup.REFLIMIT ?? null);
+        setMustHave(setup.MUSTHAVE ?? null);
+        setPrioSup(setup.EXPRI ?? null);
+        setDiffRef(setup.dref ?? 0);
+        setInstrument(setup.instrument || null);
+        setDisperser(setup.disperser || null);
+        setLastListName(maskData.objects_list?.map((o: any) => o.name).join(",") || null);
+
+        alert(`Loaded mask: ${maskName}`);
+    } catch (err) {
+        console.error(err);
+        setError((err as Error).message);
+    } finally {
+        setLoadingMasks(false);
+    }
+    };
 
 
     /* <------------------------------------------Miscellaneous--------------------------------------------> */
@@ -642,66 +754,68 @@ function MainScreen() {
             setLoading(true);
 
             const today = new Date().toISOString().slice(0, 10);
-            const payload = {
+
+            // Base required payload
+            const payload: any = {
                 user_id: userId,
                 project_name: projectName || 'untitled',
                 override: true,
-                filename: maskFileTitle || `mask_${Date.now()}`,
+                filename: maskTitle,
                 edit_date: today,
                 observer: observer || 'anonymous',
                 title: maskTitle || 'untitled',
-                center_ra: centerRA || 1,
-                center_dec: centerDec || 1,
+                center_ra: maskCenterRA,
+                center_dec: maskCenterDec,
                 equinox: equinox ? Number(equinox) : 2000.0,
-                position: slitAngle,
-                dref: 1,
-                hangle: HA || 1,
+                position: slitAngle ?? 0,
+                dref: diffRef ?? 1,
+                hangle: HA ?? 1,
+                guide_stars: guideStars,
 
-                guide_stars: [
-                    {
-                        "name": "GS1",
-                        "ra": "10.002168",
-                        "dec": "2.61311",
-                        "equinox": 2000.0,
-                        "id": "GS101"
-                    },
-                    {
-                        "name": "GS2",
-                        "ra": "10.002909",
-                        "dec": "2.10239",
-                        "equinox": 2000.0,
-                        "id": "GS102"
-                    }
-                ],
-
-
-                // instrument setup
+                // Instrument setup
                 telescope: "Magellan",
                 instrument: instrument || "IMACS_sc",
-                disperser:  disperser  || "IMACS_grism_400",
-
-
-                wlimit_low: lowerWave || 3000,
-                wlimit_high: upperWave || 5000,
-                wavelength: 4731.46,
-                pdecide: pdecide || 1,
-                slit_width: slitWidth || 1,
-                a_len: 3.0,
-                b_len: 3.0,
+                disperser: disperser || "IMACS_grism_400",
+                wlimit_low: lowerWave ?? 3000,
+                wlimit_high: upperWave ?? 5000,
+                wavelength: waveCenter ?? 4731.46,
+                pdecide: pdecide ?? 1,
+                slit_width: slitWidth ?? 1,
+                a_len: lowerLength ?? 3.0,
+                b_len: upperLength ?? 3.0,
                 slit_tilt: 0.0,
-                refhole_width: 5.0,
-                refhole_shape: 1,
-                refhole_a_len: 2.5,
-                refhole_b_len: 2.5,
+                refhole_width: alignHoleSize ?? 5.0,
+                refhole_shape: shape ?? 1,
+                refhole_a_len: lowerLength ?? 2.5,
+                refhole_b_len: upperLength ?? 2.5,
                 refhole_orient_deg: 0.0,
-                overlap: overlapPixels || -2,
-                exorder: 0,
+                overlap: overlapPixels ?? -2,
+                exorder: exorder ?? 0,
                 date: today,
 
-
+                // Objects
                 objects: lastListName,
             };
 
+            // Optional parameters: only add if not null
+            const optionalFields: Record<string, any> = {
+                SLEXTEND: extendSlits,
+                UNCUTLEFT: uncutLeft,
+                UNCUTRIGHT: uncutRight,
+                MUSTHAVE: mustHave,
+                EXPRI: prioSup,
+                REPOBJ: repeatObject,
+                REPREF: ref,
+                REFLIMIT: refLimit,
+            };
+
+            for (const [key, value] of Object.entries(optionalFields)) {
+                if (value !== null && value !== undefined) {
+                    payload[key] = value;
+                }
+            }
+
+            // Fetch API call
             const res = await fetch('/api/masks/generate/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'user-id': userId },
@@ -713,7 +827,6 @@ function MainScreen() {
                 throw new Error(`Generate failed: ${res.status} ${t}`);
             }
 
-
             const ct = res.headers.get('Content-Type') || '';
             let blob: Blob;
             let filename = `${payload.filename || 'mask'}.smf`;
@@ -721,23 +834,16 @@ function MainScreen() {
             if (ct.includes('application/json')) {
                 const j = await res.json();
                 const fileUrl = j?.path || j?.file || j?.url;
-                if (!fileUrl || typeof fileUrl !== 'string') {
-                    throw new Error('Generate succeeded but no file path returned');
-                }
+                if (!fileUrl || typeof fileUrl !== 'string') throw new Error('Generate succeeded but no file path returned');
                 const fileRes = await fetch(fileUrl, { headers: { 'user-id': userId } });
                 if (!fileRes.ok) throw new Error(`Download failed: ${fileRes.status}`);
                 blob = await fileRes.blob();
-
                 const cd = fileRes.headers.get('Content-Disposition');
-                if (cd && cd.includes('filename=')) {
-                    filename = cd.split('filename=')[1].replace(/["']/g, '');
-                }
+                if (cd && cd.includes('filename=')) filename = cd.split('filename=')[1].replace(/["']/g, '');
             } else {
                 blob = await res.blob();
                 const cd = res.headers.get('Content-Disposition');
-                if (cd && cd.includes('filename=')) {
-                    filename = cd.split('filename=')[1].replace(/["']/g, '');
-                }
+                if (cd && cd.includes('filename=')) filename = cd.split('filename=')[1].replace(/["']/g, '');
             }
 
             const url = URL.createObjectURL(blob);
@@ -748,7 +854,8 @@ function MainScreen() {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            setIsMaskGenerated(true)
+            setIsMaskGenerated(true);
+
         } catch (err) {
             console.error(err);
             alert((err as Error).message || 'Failed to generate mask');
@@ -756,6 +863,7 @@ function MainScreen() {
             setLoading(false);
         }
     }
+
 
     const handleBackFromFinalize = () => {
         setShowMaskTab(true)
@@ -1155,7 +1263,7 @@ function MainScreen() {
                                             mask="00:00:00.000"
                                             placeholder="24:00:00.000"
                                             value={centerRA}
-                                            onAccept={(v) => setCenterRA(String(v))}
+                                            onAccept={(v) => setCenterRA(v)}
                                             styles={{input: {borderColor: '#586072'}}}
                                         />
 
@@ -1165,7 +1273,7 @@ function MainScreen() {
                                             mask="00:00:00:00"
                                             placeholder="±90:00:00:00"
                                             value={centerDec}
-                                            onAccept={(v) => setCenterDec(String(v))}
+                                            onAccept={(v) => setCenterDec(v)}
                                             styles={{input: {borderColor: '#586072'}}}
                                             mt="md"
                                         />
@@ -1333,6 +1441,24 @@ function MainScreen() {
                                                 </Menu.Item>
                                             </Menu.Dropdown>
                                         </Menu>
+
+                                        <Menu onOpen={fetchMaskNames}>
+                                        <Menu.Target>
+                                            <Button>Open Masks</Button>
+                                        </Menu.Target>
+
+                                        <Menu.Dropdown>
+                                            <Menu.Label>Masks</Menu.Label>
+                                            
+                                            {maskNames.map((mask) => (
+                                            <Menu.Item key={mask} onClick={() => loadMaskDetails(mask)}>
+                                                {mask}
+                                            </Menu.Item>
+                                            ))}
+                                        </Menu.Dropdown>
+                                        </Menu>
+
+
                                     </div>
 
                                     <h2>MaskGen Parameters</h2>
@@ -1340,54 +1466,57 @@ function MainScreen() {
                                 </div>
 
                                 {/*everything that should be scrollable goes in here (pretty much everything)*/}
-                                <div className="param-scroll">
-                                    {/*title*/}
-                                    <TextInput
-                                        radius="md"
-                                        label="Mask Title"
-                                        placeholder="e.g. Mask A"
-                                        style={{width: 352}}
-                                        styles={{input: {borderColor: '#586072'}}}
-                                        value={maskTitle}
-                                        onChange={(e) => setMaskTitle(e.currentTarget.value)}
-                                    />
-
-                                    <div className="observer-settings">
-                                        {/*observer name input*/}
+                                <ScrollArea style={{ height: '100%' }}>
+                                    <div className="param-scroll">
+                                        {/*title*/}
                                         <TextInput
-                                            radius="md"
-                                            label="Observer"
-                                            placeholder="Enter observer name"
-                                            style={{width: 170}}
+                                            radius="sm"
+                                            label="Mask Title"
+                                            placeholder="e.g. Mask A"
+                                            style={{width: 352}}
                                             styles={{input: {borderColor: '#586072'}}}
-                                            value={observer}
-                                            onChange={(e) => setObserver(e.currentTarget.value)}
+                                            value={maskTitle}
+                                            onChange={(e) => setMaskTitle(e.currentTarget.value)}
                                         />
 
-                                        {/*observation date picker*/}
-                                        <DateTimePicker
-                                            withSeconds
-                                            valueFormat="MMM DD, YYYY h:mm:ss A"
-                                            label="Observation Date"
-                                            placeholder="Pick date and time"
-                                            style={{width: 170}}
-                                            styles={{input: {textAlign: 'center', borderColor: '#586072'}}}
-                                            popoverProps={{
-                                                position: 'bottom',
-                                                middlewares: {shift: true, flip: true},
-                                                offset: 4,
-                                            }}
-                                        />
-                                    </div>
+                                        <div className="observer-settings">
+                                            {/*observer name input*/}
+                                            <TextInput
+                                                radius="sm"
+                                                label="Observer"
+                                                placeholder="Enter observer name"
+                                                style={{width: 170}}
+                                                styles={{input: {borderColor: '#586072'}}}
+                                                value={observer}
+                                                onChange={(e) => setObserver(e.currentTarget.value)}
+                                            />
 
-                                    <div className="ra-declination">
+                                            {/*observation date picker*/}
+                                            <DateTimePicker
+                                                withSeconds
+                                                valueFormat="MMM DD, YYYY h:mm:ss A"
+                                                label="Observation Date"
+                                                placeholder="Pick date and time"
+                                                style={{width: 170}}
+                                                styles={{input: {textAlign: 'center', borderColor: '#586072'}}}
+                                                popoverProps={{
+                                                    position: 'bottom',
+                                                    middlewares: {shift: true, flip: true},
+                                                    offset: 4,
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className="ra-declination" style={{ display: "flex", gap: "1rem" }}>
                                         <InputBase
                                             label="Right Ascension"
                                             component={IMaskInput}
                                             mask="00:00:00.000"
                                             placeholder="e.g. 24:00:00.000"
-                                            style={{width: 170}}
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            value={maskCenterRA}
+                                            onAccept={(val: any) => setMaskCenterRA(val)}
+                                            style={{ width: 170 }}
+                                            styles={{ input: { borderColor: "#586072" } }}
                                         />
 
                                         <InputBase
@@ -1395,324 +1524,474 @@ function MainScreen() {
                                             component={IMaskInput}
                                             mask="00:00:00.000"
                                             placeholder="e.g. +/- 90:00:00.000"
-                                            style={{width: 170}}
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            value={maskCenterDec}
+                                            onAccept={(val: any) => setMaskCenterDec(val)}
+                                            style={{ width: 170 }}
+                                            styles={{ input: { borderColor: "#586072" } }}
                                         />
-                                    </div>
+                                        </div>
 
-                                    <div className="equinox-slit-angle">
-                                        {/*selecting an instrument*/}
-                                        <Select
+                                        <div className="equinox-slit-angle">
+                                            {/*selecting an instrument*/}
+                                            <NumberInput
                                             label="Equinox"
-                                            placeholder="Select"
-                                            data={['2000', 'hm', 'hm?', 'hmm??']}
-                                            style={{width: 170}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                            value={equinox}
-                                            onChange={setEquinox}
-                                        />
+                                            placeholder="e.g. 2000"
+                                            style={{ width: 170 }}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            value={equinox ?? undefined}
+                                            onChange={(val) => setEquinox(String(val))}
+                                            />
+                                            {/* TODO */}
+                                            <NumberInput
+                                                label="Slit Position Angle"
+                                                placeholder="0.0"
+                                                style={{width: 170}}
+                                                styles={{input: {borderColor: '#586072'}}}
+                                                value={slitAngle ?? undefined}
+                                                onChange={(v) => setSlitAngle(typeof v === 'number' ? v : null)}
+                                            />
+                                        </div>
 
-                                        <NumberInput
-                                            label="Slit Position Angle"
-                                            placeholder="0.0"
-                                            style={{width: 170}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                            value={slitAngle ?? undefined}
-                                            onChange={(v) => setSlitAngle(typeof v === 'number' ? v : null)}
-                                        />
-                                    </div>
+                                        <h3>Instrument Details</h3>
 
-                                    <h3>Instrument Details</h3>
+                                        <div className="instrument-disperser">
+                                            {/*selecting an instrument*/}
+                                            <Select
+                                                label="Instrument"
+                                                placeholder="Select"
+                                                data={['IMACS_sc', 'IMACS_f2', 'GISMO_f2', 'IMACS_f4', 'GISMO_f4', 'GISMO MNS', 'GISMO AP', 'LDSS', 'LDSS N&S Micro', 'LDSS N&S Macro']}
+                                                styles={{input: {borderColor: '#586072'}}}
+                                                value={instrument}
+                                                style={{width: "40%", marginLeft: "5%"}}
+                                                onChange={(v) => {
+                                                    setInstrument(v);
+                                                    if (v) void loadInstrumentConfig(v);
+                                                    else {
+                                                        setFilterOptions([]);
+                                                        setDisperserOptions([]);
+                                                    }
+                                                }}
+                                            />
 
-                                    <div className="instrument-disperser">
-                                        {/*selecting an instrument*/}
-                                        <Select
-                                            label="Instrument"
-                                            placeholder="Select"
-                                            data={['IMACS_sc', 'IMACS_f2', 'GISMO_f2', 'IMACS_f4', 'GISMO_f4', 'GISMO MNS', 'GISMO AP', 'LDSS', 'LDSS N&S Micro', 'LDSS N&S Macro']}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                            value={instrument}
-                                            onChange={(v) => {
-                                                setInstrument(v);
-                                                if (v) void loadInstrumentConfig(v);
-                                                else {
-                                                    setFilterOptions([]);
-                                                    setDisperserOptions([]);
-                                                }
-                                            }}
-                                        />
+                                            {/*selecting a disperser*/}
+                                            <Select
+                                                label="Disperser"
+                                                placeholder={(disperserOptions.length ? 'Select' : 'No dispersers found')}
+                                                nothingFoundMessage="No dispersers found; check your instrument configurations"
+                                                data={disperserOptions}
+                                                disabled={!instrument}
+                                                style={{width: "40%", marginRight: "5%"}}
+                                                value={disperser}
+                                                onChange={setDisperser}
+                                                styles={{input: {borderColor: '#586072'}}}
+                                            />
+                                        </div>
 
-                                        {/*selecting a disperser*/}
-                                        <Select
-                                            label="Disperser"
-                                            placeholder={(disperserOptions.length ? 'Select' : 'No dispersers found')}
-                                            nothingFoundMessage="No dispersers found; check your instrument configurations"
-                                            data={disperserOptions}
-                                            disabled={!instrument}
-                                            value={disperser}
-                                            onChange={setDisperser}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
-
-                                    <div className="filter-order-ha">
-                                        {/*light filter?*/}
+                                        <div className="filter-order-ha" style={{ width: "75%", display: 'flex', justifyContent: 'space-between', gap: '2%' }}>
+                                        {/* Filter */}
                                         <Select
                                             label="Filter"
-                                            placeholder={(filterOptions.length ? 'Select' : 'No filters found')}
+                                            placeholder={filterOptions.length ? 'Select' : 'No filters found'}
                                             nothingFoundMessage="No filters found; check your instrument configurations"
                                             data={filterOptions}
                                             disabled={!instrument}
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "32%" }} // outer wrapper width
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }} // padding inside the input
                                         />
 
-                                        {/*no clue what order means*/}
+                                        {/* Order */}
                                         <NumberInput
                                             label="Order"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "32%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                         />
 
-                                        {/*even more clueless here*/}
+                                        {/* H.A. */}
                                         <NumberInput
-                                            label="H.A."
+                                            label="H.Angle"
                                             placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "32%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                             value={HA ?? undefined}
                                             onChange={(v) => setHA(typeof v === 'number' ? v : null)}
                                         />
-                                    </div>
+                                        </div>
 
-                                    Wavelength Settings
 
-                                    <div className="wavelength-settings">
+                                        Wavelength Settings
+
+                                        <div className="wavelength-settings" style={{ display: 'flex', alignItems: 'center' }}>
                                         <NumberInput
-                                            label=" Lower λ"
+                                            label="Lower λ"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "40%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                             value={lowerWave ?? undefined}
                                             onChange={(v) => setLowerWave(typeof v === 'number' ? v : null)}
                                         />
 
-                                        -
+                                        <span style={{ margin: '0 5%' }}>-</span>
 
                                         <NumberInput
                                             label="Upper λ"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "40%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                             value={upperWave ?? undefined}
                                             onChange={(v) => setUpperWave(typeof v === 'number' ? v : null)}
                                         />
-                                    </div>
+                                        </div>
 
-                                    Detector Range
 
-                                    <div className="detector-range">
+                                        {/* <div className="detector-range" style={{ display: 'flex', alignItems: 'center' }}>
                                         <NumberInput
-                                            label=" Lower λ"
+                                            label="Lower λ"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "40%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                         />
 
-                                        -
+                                        <span style={{ margin: '0 5%' }}>-</span>
 
                                         <NumberInput
                                             label="Upper λ"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
+                                            style={{ width: "40%" }}
+                                            styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
                                         />
-                                    </div>
+                                        </div> */}
 
-                                    <div className="ns-mode-center-λ-ex-ord">
-                                        <Switch
-                                            labelPosition="left"
-                                            label="N & S Mode"
-                                            color="#586072"
-                                        />
 
-                                        <NumberInput
+                                        <div className="ns-mode-center-λ-ex-ord">
+                                            <Switch
+                                                labelPosition="left"
+                                                label="N & S Mode"
+                                                color="#586072"
+                                            />
+
+                                            
+                                            <NumberInput
                                             label="Center λ"
                                             placeholder="0"
-                                            style={{width: 100}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            value={waveCenter ?? undefined}
+                                            onChange={(v) => setWaveCenter(typeof v === 'number' ? v : null)}
+                                            style={{ width: 120 }}
+                                            styles={{ input: { borderColor: "#586072" } }}
+                                            />
 
-                                        <Select
-                                            label="Ex.Ord"
-                                            placeholder="Select"
-                                            data={['Clear', 'Dirty']}
-                                            style={{width: 100}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
 
-                                    <h3>Slit Specifications (ArcSeconds)</h3>
+                                            <NumberInput
+                                                label="Exorder"
+                                                placeholder="0"
+                                                style={{ width: "32%" }}
+                                                value={exorder ?? undefined}
+                                                onChange={(v) => setExorder(typeof v === 'number' ? v : null)}
+                                                styles={{ input: { borderColor: '#586072', padding: '4px 8px' } }}
+                                            />
+                                        </div>
+                                        <h3>Guide Stars</h3>
+                                        <div className="guide-stars">
+                                        {guideStars.map((gs, idx) => (
+                                            <div key={idx} style={{ marginBottom: 15 }}>
+                                            {/* Row 1: Name and Equinox */}
+                                            <div style={{ display: 'flex', gap: 10, marginBottom: 5 }}>
+                                                <TextInput
+                                                label={`Guide Star ${idx + 1} Name`}
+                                                placeholder={`GS${idx + 1}`}
+                                                style={{ width: "70%" }}
+                                                value={gs.name}
+                                                onChange={(e) => {
+                                                    const newStars = [...guideStars];
+                                                    newStars[idx].name = e.currentTarget.value;
+                                                    setGuideStars(newStars);
+                                                }}
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                />
 
-                                    <div className="shape-uncut">
-                                        <Select
+                                                <NumberInput
+                                                label="Equinox"
+                                                placeholder="2000.0"
+                                                style={{ width: "25%" }}
+                                                value={gs.equinox}
+                                                onChange={(v) => {
+                                                    const newStars = [...guideStars];
+                                                    newStars[idx].equinox = typeof v === 'number' ? v : 2000.0;
+                                                    setGuideStars(newStars);
+                                                }}
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                />
+                                            </div>
+
+                                            {/* Row 2: RA and Dec */}
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <TextInput
+                                                label="RA"
+                                                placeholder="hh:mm:ss.sss"
+                                                style={{ width: "50%" }}
+                                                value={gs.ra}
+                                                onChange={(e) => {
+                                                    const newStars = [...guideStars];
+                                                    newStars[idx].ra = e.currentTarget.value;
+                                                    setGuideStars(newStars);
+                                                }}
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                />
+
+                                                <TextInput
+                                                label="Dec"
+                                                placeholder="+dd:mm:ss.sss"
+                                                style={{ width: "50%" }}
+                                                value={gs.dec}
+                                                onChange={(e) => {
+                                                    const newStars = [...guideStars];
+                                                    newStars[idx].dec = e.currentTarget.value;
+                                                    setGuideStars(newStars);
+                                                }}
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                />
+                                            </div>
+                                            </div>
+                                        ))}
+                                        </div>
+
+
+
+                                        <h3>Slit Specifications (ArcSeconds)</h3>
+
+                                        <div className="shape-uncut">
+                                            <Select
                                             label="Shape"
                                             placeholder="Select"
-                                            data={['Slit', 'what else is there?']}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            data={[
+                                                { value: "0", label: 'Circle' },
+                                                { value: "1", label: 'Square' },
+                                                { value: "2", label: 'Rectangle' },
+                                            ]}
+                                            value={shape !== null ? shape.toString() : null}  // string for the Select
+                                            onChange={(val) => setShape(val !== null ? Number(val) : null)} // convert back to number
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
 
-                                        <NumberInput
-                                            label="Uncut (lower)"
-                                            placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
 
-                                        -
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <NumberInput
+                                                label="Uncut (left)"
+                                                placeholder="0.0"
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                value={uncutLeft ?? undefined}
+                                                onChange={(val) => setUncutLeft(typeof val === 'number' ? val : null)}
+                                                style={{ width: '45%' }}
+                                            />
 
-                                        <NumberInput
-                                            label="Uncut (upper)"
-                                            placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
+                                            <span>-</span>
 
-                                    <div className="width-lengths">
-                                        <NumberInput
-                                            label="Width"
-                                            placeholder="0.00"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                            value={slitWidth ?? undefined}
-                                            onChange={(v) => setSlitWidth(typeof v === 'number' ? v : null)}
-                                        />
+                                            <NumberInput
+                                                label="Uncut (right)"
+                                                placeholder="0.0"
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                value={uncutRight ?? undefined}
+                                                onChange={(val) => setUncutRight(typeof val === 'number' ? val : null)}
+                                                style={{ width: '45%' }}
+                                            />
+                                            </div>
+                                        </div>
 
-                                        <NumberInput
-                                            label="Lower Length"
-                                            placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                        <div className="width-lengths">
+                                            <NumberInput
+                                                label="Width"
+                                                placeholder="0.00"
+                                                styles={{input: {borderColor: '#586072'}}}
+                                                value={slitWidth ?? undefined}
+                                                onChange={(v) => setSlitWidth(typeof v === 'number' ? v : null)}
+                                            />
 
-                                        -
+                                            <NumberInput
+                                                label="Lower Length (a-len)"
+                                                placeholder="0.0"
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                value={lowerLength ?? undefined}
+                                                onChange={(val) => setLowerLength(typeof val === 'number' ? val : null)}
+                                                style={{ width: '45%' }}
+                                            />
 
-                                        <NumberInput
-                                            label="Upper Length"
-                                            placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
+                                            <span>-</span>
 
-                                    <div className="extend-align-overlap">
-                                        <Switch
+                                            <NumberInput
+                                                label="Upper Length (b-len)"
+                                                placeholder="0.0"
+                                                styles={{ input: { borderColor: '#586072' } }}
+                                                value={upperLength ?? undefined}
+                                                onChange={(val) => setUpperLength(typeof val === 'number' ? val : null)}
+                                                style={{ width: '45%' }}
+                                            />
+                                        </div>
+
+                                        <div className="extend-align-overlap">
+                                            <Switch
                                             labelPosition="left"
                                             label="Extend Slits"
                                             color="#586072"
-                                        />
+                                            checked={extendSlits === 1}
+                                            onChange={(event) => setExtendSlits(event.currentTarget.checked ? 1 : 0)}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Align Hole Size"
                                             placeholder="0.0"
-                                            style={{width: 100}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            style={{ width: 100 }}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            value={alignHoleSize ?? undefined}
+                                            onChange={(val) => setAlignHoleSize(typeof val === 'number' ? val : null)}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Overlap Pixels"
                                             placeholder="0.0"
-                                            style={{width: 100}}
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
+                                            style={{ width: 100 }}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            value={overlapPixels ?? undefined}
+                                            onChange={(val) => setOverlapPixels(typeof val === 'number' ? val : null)}
+                                            />
+                                        </div>
 
-                                    <div className="repeat-obj-ref-limit">
-                                        <NumberInput
+                                        <div className="repeat-obj-ref-limit">
+                                            <NumberInput
                                             label="Repeat Object"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            value={repeatObject ?? undefined}
+                                            onChange={(val) => setRepeatObject(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Ref."
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            value={ref ?? undefined}
+                                            onChange={(val) => setRef(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Ref. Limit"
                                             placeholder="0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
+                                            value={refLimit ?? undefined}
+                                            onChange={(val) => setRefLimit(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
+                                        </div>
 
-                                    <div className="musthave-pdecide-prio-sup">
-                                        <NumberInput
+                                        <div className="musthave-pdecide-prio-sup">
+                                            <NumberInput
                                             label="Must Have"
                                             placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
+                                            value={mustHave ?? undefined}
+                                            onChange={(val) => setMustHave(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Pdecide"
                                             placeholder="0.0"
-                                            styles={{input: {borderColor: '#586072'}}}
                                             value={pdecide ?? undefined}
-                                            onChange={(v) => setPdecide(typeof v === 'number' ? v : null)}
-                                        />
+                                            onChange={(val) => setPdecide(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
 
-                                        <NumberInput
+                                            <NumberInput
                                             label="Prio. Sup"
                                             placeholder="0.00"
-                                            styles={{input: {borderColor: '#586072'}}}
-                                        />
-                                    </div>
+                                            value={prioSup ?? undefined}
+                                            onChange={(val) => setPrioSup(typeof val === "number" ? val : null)}
+                                            styles={{ input: { borderColor: '#586072' } }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Switch
+                                            labelPosition="left"
+                                            label="Diff Ref"
+                                            color="#586072"
+                                            checked={diffRef === 1}
+                                            onChange={(event) => setDiffRef(event.currentTarget.checked ? 1 : 0)}
+                                            />
 
-                                    <div className="aesthetic-gap">
-                                        -
-                                    </div>
+                                        </div>
 
-                                    <div className="upload-object-files">
-                                        {/*upload object files button*/}
-                                        <FileButton onChange={handleObjectFiles} accept=".csv,.obj,.json" multiple>
-                                            {(props) => (
-                                                <Button {...props}>Upload Object Files</Button>
+                                        <div className="upload-object-files">
+                                            {/*upload object files button*/}
+                                            <FileButton onChange={handleObjectFiles} accept=".csv,.obj,.json" multiple>
+                                                {(props) => (
+                                                    <Button {...props}>Upload Object Files</Button>
+                                                )}
+                                            </FileButton>
+
+                                            {/*listing the objects*/}
+                                            {selectedFiles.length > 0 && (
+                                                <ul className="uploaded-files">
+                                                    {/*listing the files*/}
+                                                    {selectedFiles.map((file) => (
+                                                        <li key={file.name}>{file.name}</li>
+                                                    ))}
+
+                                                    {/*submit button*/}
+                                                    <Button onClick={handleSubmitFiles}>Submit</Button>
+
+                                                    {error && <li style={{color: 'red'}}>{error}</li>}
+                                                    {successMessage &&
+                                                        <li style={{color: 'lime'}}>Successfully received and stored.</li>}
+                                                </ul>
                                             )}
-                                        </FileButton>
+                                        </div>
 
-                                        {/*listing the objects*/}
-                                        {selectedFiles.length > 0 && (
-                                            <ul className="uploaded-files">
-                                                {/*listing the files*/}
-                                                {selectedFiles.map((file) => (
-                                                    <li key={file.name}>{file.name}</li>
-                                                ))}
-
-                                                {/*submit button*/}
-                                                <Button onClick={handleSubmitFiles}>Submit</Button>
-
-                                                {error && <li style={{color: 'red'}}>{error}</li>}
-                                                {successMessage &&
-                                                    <li style={{color: 'lime'}}>Successfully received and stored.</li>}
-                                            </ul>
-                                        )}
                                     </div>
-
-                                </div>
+                                </ScrollArea>
                             </aside>
 
                             {/* → Where the Aladin panel goes */}
                             <div className="preview-area">
-                                <AladinSlits userId="u123"  projectName="galaxySurvey"  maskName="mask001"/>
+                                <AladinSlits userId={userId}  projectName={projectName}  maskName={maskTitle}/>
                             </div>
                             {/* → fixed-width sidebar for essential controls */}
+                            <ScrollArea>
                             <aside className="sidebar">
-                                {/*<h2>Essential Controls</h2>*/}
-                                <EssentialControlButtons text="Load FITS File" onClick={handleLoad}
-                                                         icon={<IconProgress stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Reset Parameters" onClick={handleReset}
-                                                         icon={<IconRefresh stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Undo" onClick={handleUndo}
-                                                         icon={<IconArrowBackUp stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Redo" onClick={handleRedo}
-                                                         icon={<IconArrowForwardUp stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Parameter History" onClick={handleParameterHistory}
-                                                         icon={<IconHistory stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Finalize and Submit" onClick={handleGenExport}
-                                                         icon={<IconPackageExport stroke={1.8}/>}/>
-                                <EssentialControlButtons text="Log Out" onClick={handleLogOut}
-                                                         icon={<IconLogout stroke={1.8}/>}/>
+
+                                <EssentialControlButtons
+                                    text="Reset Parameters"
+                                    onClick={handleReset}
+                                    icon={<IconRefresh stroke={1.8} />}
+                                />
+                                <EssentialControlButtons
+                                    text="Undo"
+                                    onClick={handleUndo}
+                                    icon={<IconArrowBackUp stroke={1.8} />}
+                                />
+                                <EssentialControlButtons
+                                    text="Redo"
+                                    onClick={handleRedo}
+                                    icon={<IconArrowForwardUp stroke={1.8} />}
+                                />
+                                <EssentialControlButtons
+                                    text="Parameter History"
+                                    onClick={handleParameterHistory}
+                                    icon={<IconHistory stroke={1.8} />}
+                                />
+
+                                {/* Finalize Buttons */}
+                                <EssentialControlButtons
+                                    text="Generate Mask"
+                                    onClick={handleGenerateMask}
+                                />
+                                <EssentialControlButtons
+                                    text="Mark as Complete"
+                                    onClick={handleFinalizeMask}
+                                    disabled={!isMaskGenerated}
+                                />
+                                
+                                <EssentialControlButtons
+                                    text="Log Out"
+                                    onClick={handleLogOut}
+                                    icon={<IconLogout stroke={1.8} />}
+                                />
 
                                 {/*accepting FIT files for loading*/}
                                 <input
@@ -1720,10 +1999,10 @@ function MainScreen() {
                                     accept=".fits, .fit, .fts"
                                     ref={fileRef}
                                     onChange={handleLoadFile}
-                                    style={{display: "none"}}
+                                    style={{ display: "none" }}
                                 />
-
                             </aside>
+                            </ScrollArea>
                         </div>
                     </Tabs.Panel>
 
@@ -1876,7 +2155,7 @@ function MainScreen() {
                             <TextInput
                                 radius="md"
                                 label="Mask file name"
-                                placeholder="Leave blank for mask_(today's date)"
+                                placeholder="Must be unique to project"
                                 value={maskFileTitle}
                                 style={{width: 400}}
                                 styles={{input: {borderColor: '#586072'}}}

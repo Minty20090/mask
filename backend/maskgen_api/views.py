@@ -275,7 +275,7 @@ class ObjectViewSet(viewsets.ViewSet):
             {"object lists": list(obj_lists)},
             status=status.HTTP_200_OK,
         )
-      
+
     @action(detail=False, methods=["delete"], url_path="delete_obj")
     def delete_obj(self, request):
         list_name = request.query_params.get("list_name")
@@ -416,6 +416,7 @@ class MaskViewSet(viewsets.ViewSet):
         )
 
     def _generate_single_mask(self, user_id, proj_name, data, project):
+        print(data)
         filename = data["filename"]
 
         generate_obj_file(user_id, proj_name, filename, data["objects"])
@@ -423,11 +424,9 @@ class MaskViewSet(viewsets.ViewSet):
         os.environ["MGPATH"] = MASKGEN_DIRECTORY
         shutil.copy(
             f"{PROJECT_DIRECTORY}{API_FOLDER}obj_files/{user_id}/{proj_name}/{filename}.obj",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}obj_files/{user_id}/{proj_name}/{filename}.obj",
             f"{MASKGEN_DIRECTORY}{filename}.obj",
         )
         shutil.copy(
-            f"{PROJECT_DIRECTORY}{API_FOLDER}obs_files/{user_id}/{proj_name}/{filename}.obs",
             f"{PROJECT_DIRECTORY}{API_FOLDER}obs_files/{user_id}/{proj_name}/{filename}.obs",
             f"{MASKGEN_DIRECTORY}{filename}.obs",
         )
@@ -450,6 +449,7 @@ class MaskViewSet(viewsets.ViewSet):
             f"{MASKGEN_DIRECTORY}/maskgen -s {filename}.obs",
             data["override"] == "true",
         )
+        print(feedback)
         os.makedirs(
             os.path.join(f"{PROJECT_DIRECTORY}{API_FOLDER}smf_files", user_id),
             exist_ok=True,
@@ -462,7 +462,6 @@ class MaskViewSet(viewsets.ViewSet):
         )
         os.rename(
             f"{PROJECT_DIRECTORY}{filename}.SMF",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}smf_files/{user_id}/{proj_name}/{filename}.SMF",
             f"{PROJECT_DIRECTORY}{API_FOLDER}smf_files/{user_id}/{proj_name}/{filename}.SMF",
         )
 
@@ -499,7 +498,7 @@ class MaskViewSet(viewsets.ViewSet):
             )
 
             result, feedback = categorize_objs(
-                mask, f"{PROJECT_DIRECTORY}{filename}.obw"
+                mask, f"{PROJECT_DIRECTORY}{filename}.obw", data["objects"], proj_name
             )
             self._file_cleanup(filename)
 
@@ -580,7 +579,7 @@ class MaskViewSet(viewsets.ViewSet):
             )
         else:
             result, response, _ = self._generate_single_mask(
-                user_id, proj_name, data, project
+                self, user_id, proj_name, data, project
             )
             if result:
                 generated.append(data["filename"])
@@ -672,10 +671,6 @@ class MaskViewSet(viewsets.ViewSet):
             f"{PROJECT_DIRECTORY}{API_FOLDER}obs_files/{user_id}/{proj_name}/{mask_name}.obs",
             f"{PROJECT_DIRECTORY}{API_FOLDER}obj_files/{user_id}/{proj_name}/{mask_name}.obj",
             f"{PROJECT_DIRECTORY}{API_FOLDER}nc_files/{user_id}/{proj_name}/I{mask_name}.nc",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}smf_files/{user_id}/{proj_name}/{mask_name}.SMF",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}obs_files/{user_id}/{proj_name}/{mask_name}.obs",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}obj_files/{user_id}/{proj_name}/{mask_name}.obj",
-            f"{PROJECT_DIRECTORY}{API_FOLDER}nc_files/{user_id}/{proj_name}/I{mask_name}.nc",
         ]
         for file_path in file_paths:
             remove_file(file_path)
@@ -704,6 +699,14 @@ class MaskViewSet(viewsets.ViewSet):
         """
         masks = Mask.objects.filter(status="completed")
         serializer = MaskSerializer(masks, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="get_project_masks")
+    def get_project_masks(self, request):
+        user_id = request.headers.get("user-id")
+        proj_name = request.query_params.get("project_name")
+        project = Project.objects.filter(name=proj_name, user_id=user_id).first()
+        serializer = MaskSerializer(project.masks, many=True)
         return Response(serializer.data)
 
 
@@ -757,7 +760,6 @@ class MachineViewSet(viewsets.ViewSet):
                 )
                 os.rename(
                     f"{PROJECT_DIRECTORY}I{mask_name}.nc",
-                    f"{PROJECT_DIRECTORY}{API_FOLDER}nc_files/{user_id}/{proj_name}/I{mask_name}.nc",
                     f"{PROJECT_DIRECTORY}{API_FOLDER}nc_files/{user_id}/{proj_name}/I{mask_name}.nc",
                 )
 

@@ -473,3 +473,21 @@ body.waiting, body.waiting * {
     max-width: 700px;      /* tune to taste */
     margin: 0 auto;
 }
+
+
+.param-controls {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.param-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px; /* avoids scrollbar overlap */
+    max-height: 100%;   /* ensures it respects parent height */
+}
+
+h3 {
+    margin-bottom: 5px;
+}

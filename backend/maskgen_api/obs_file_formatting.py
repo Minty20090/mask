@@ -18,14 +18,16 @@ def to_deg(ra, dec):
     return ra, dec
 
 
-def categorize_objs(mask, file_path):
+def categorize_objs(mask, file_path, obj_list_name, proj_name):
+    obj_list = ObjectList.objects.get(name=obj_list_name, project_name=proj_name)
+
     lines = Path(file_path).read_text().splitlines()
     for line in lines:
         # get obj name
         match = re.match(r"[@\*](\S+)", line)
         if match:
             try:
-                obj = Object.objects.get(name=match.group(1))
+                obj = obj_list.objects_list.get(name=match.group(1))
                 if re.search(r"Use=\d+", line):
                     mask.objects_list.add(obj)
                 else:
@@ -202,10 +204,31 @@ REFHOLE   {instrument_setup['refhole_width']:.3f} {instrument_setup['refhole_sha
 OVERLAP    {instrument_setup['overlap']:.2f}
 EXORDER  {instrument_setup['exorder']}
 DATE {instrument_setup['date']}
-#  Object file list
 """
+    optional_keys = [
+        "SLEXTEND",
+        "UNCUTLEFT",
+        "UNCUTRIGHT",
+        "MUSTHAVE",
+        "EXPRI",
+        "GRATING",
+        "FILTER",
+        "DLIMIT",
+        "REPOBJ",
+        "REPREF",
+        "REFSEL",
+        "REFLIMIT",
+        "ORDER",
+    ]
+    for key in optional_keys:
+        if key in instrument_setup:
+            value = instrument_setup[key]
+            if isinstance(value, (list, tuple)):
+                obs_header += f"{key}  {' '.join(map(str, value))}\n"
+            else:
+                obs_header += f"{key}  {value}"
     for obj_path in obj_file_paths:
-        obs_header += f"OBJFILE  {obj_path}\n"
+        obs_header += f"#  Object file list\nOBJFILE  {obj_path}\n"
     script_dir = os.path.dirname(__file__)
 
     path = os.path.join(
