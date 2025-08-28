@@ -226,7 +226,7 @@ DATE {instrument_setup['date']}
             if isinstance(value, (list, tuple)):
                 obs_header += f"{key}  {' '.join(map(str, value))}\n"
             else:
-                obs_header += f"{key}  {value}"
+                obs_header += f"{key}  {value}\n"
     for obj_path in obj_file_paths:
         obs_header += f"#  Object file list\nOBJFILE  {obj_path}\n"
     script_dir = os.path.dirname(__file__)
